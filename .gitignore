@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment configuration (never commit secrets)
+.env
+.env.local
+
+# Application data (uploads, extracted archives, SQLite database)
+uploads/*
+!uploads/.gitkeep
+data/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
