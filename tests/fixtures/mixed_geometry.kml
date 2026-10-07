@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Mixed Geometry Survey</name>
+    <Placemark>
+      <name>Island Group</name>
+      <MultiGeometry>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>78.4000,17.3000,0 78.4010,17.3000,0 78.4010,17.3010,0 78.4000,17.3010,0 78.4000,17.3000,0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>78.4020,17.3020,0 78.4030,17.3020,0 78.4030,17.3030,0 78.4020,17.3030,0 78.4020,17.3020,0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </MultiGeometry>
+    </Placemark>
+    <Placemark>
+      <name>Split Route</name>
+      <MultiGeometry>
+        <LineString>
+          <coordinates>78.4040,17.3000,0 78.4050,17.3010,0</coordinates>
+        </LineString>
+        <LineString>
+          <coordinates>78.4055,17.3015,0 78.4065,17.3025,0</coordinates>
+        </LineString>
+      </MultiGeometry>
+    </Placemark>
+    <Placemark>
+      <name>Composite Feature</name>
+      <MultiGeometry>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>78.4070,17.3040,0 78.4080,17.3040,0 78.4080,17.3050,0 78.4070,17.3040,0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+        <LineString>
+          <coordinates>78.4070,17.3055,0 78.4080,17.3065,0</coordinates>
+        </LineString>
+      </MultiGeometry>
+    </Placemark>
+    <Placemark>
+      <name>Benchmark</name>
+      <Point>
+        <coordinates>78.4090,17.3070,0</coordinates>
+      </Point>
+    </Placemark>
+  </Document>
+</kml>

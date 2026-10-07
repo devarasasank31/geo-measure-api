@@ -82,6 +82,28 @@ def shapefile_zip(make_shapefile_zip: Callable[..., Path]) -> Path:
 
 
 @pytest.fixture()
+def shapefile_zip_without_crs(make_shapefile_zip: Callable[..., Path], tmp_path: Path) -> Path:
+    """A Shapefile archive whose ``.prj`` sidecar has been removed."""
+    gdf = gpd.GeoDataFrame(
+        {"name": ["No CRS Field"]},
+        geometry=[box(78.40, 17.30, 78.41, 17.31)],
+        crs="EPSG:4326",
+    )
+    archive = make_shapefile_zip(gdf, "no_crs.zip")
+
+    rewritten = io.BytesIO()
+    with zipfile.ZipFile(archive) as source, zipfile.ZipFile(
+        rewritten, "w", zipfile.ZIP_DEFLATED
+    ) as target:
+        for info in source.infolist():
+            if info.filename.lower().endswith(".prj"):
+                continue
+            target.writestr(info, source.read(info.filename))
+    archive.write_bytes(rewritten.getvalue())
+    return archive
+
+
+@pytest.fixture()
 def make_zip_bytes() -> Callable[..., bytes]:
     """Build ZIP archive bytes entirely in memory."""
 

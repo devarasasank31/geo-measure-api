@@ -16,6 +16,17 @@ class FileStatus(str, Enum):
     FAILED = "FAILED"
 
 
+class MeasurementStatus(str, Enum):
+    """Outcome of the measurement attempt for one feature."""
+
+    COMPLETED = "COMPLETED"
+    NOT_REQUIRED = "NOT_REQUIRED"
+    UNSUPPORTED = "UNSUPPORTED"
+    CRS_MISSING = "CRS_MISSING"
+    NULL_GEOMETRY = "NULL_GEOMETRY"
+    ERROR = "ERROR"
+
+
 class HealthResponse(BaseModel):
     """Payload returned by ``GET /health``."""
 
@@ -33,6 +44,19 @@ class Feature(BaseModel):
     crs: str | None = Field(default=None, description="CRS of the source coordinates, e.g. EPSG:4326")
     properties: dict[str, Any] = Field(
         default_factory=dict, description="Feature attributes, JSON-safe"
+    )
+
+
+class Measurement(BaseModel):
+    """Measurement result for a single feature."""
+
+    feature_id: int
+    geometry_type: str
+    measurement: float | None = Field(default=None, description="Area in m² or length in m")
+    measurement_unit: str | None = Field(default=None, description="m² or m when measured")
+    status: MeasurementStatus
+    detail: str | None = Field(
+        default=None, description="Explanation shown when the status is not COMPLETED"
     )
 
 

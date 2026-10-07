@@ -11,6 +11,7 @@ import geopandas as gpd
 from app.core.exceptions import AppException
 from app.models.schemas import Feature
 from app.services import crs_service
+from app.utils.geometry_utils import geometry_type_of
 from app.utils.serialization import geometry_to_geojson, properties_to_dict
 
 logger = logging.getLogger(__name__)
@@ -97,7 +98,7 @@ def build_features(gdf: gpd.GeoDataFrame) -> list[Feature]:
         features.append(
             Feature(
                 feature_id=position,
-                geometry_type=_geometry_type(geometry),
+                geometry_type=geometry_type_of(geometry),
                 geometry=geometry_to_geojson(geometry),
                 crs=source_crs,
                 properties=properties_to_dict(properties),
@@ -105,11 +106,6 @@ def build_features(gdf: gpd.GeoDataFrame) -> list[Feature]:
         )
     logger.debug("Extracted %d features (source CRS: %s)", len(features), source_crs)
     return features
-
-
-def _geometry_type(geometry: object) -> str:
-    geom_type = getattr(geometry, "geom_type", None)
-    return geom_type if isinstance(geom_type, str) else "Null"
 
 
 def _read_vector(path: Path, driver: str | None = None) -> gpd.GeoDataFrame:

@@ -15,7 +15,12 @@ from app.core.exceptions import AppException
 from app.db import repository
 from app.db.repository import FileRecord
 from app.models.schemas import FileStatus
-from app.services import geospatial_service, zip_service
+from app.services import (
+    crs_service,
+    geospatial_service,
+    measurement_service,
+    zip_service,
+)
 from app.utils import file_utils
 
 logger = logging.getLogger(__name__)
@@ -105,19 +110,31 @@ def process_record(file_id: str) -> None:
         features = geospatial_service.build_features(gdf)
         source_crs = geospatial_service.crs_label(gdf)
 
+        # CRS plan first: measurements are only ever computed in a metric CRS.
+        plan = crs_service.build_plan(gdf)
+        logger.info("CRS plan for %s: %s", record.filename, plan.reason)
+        measured_gdf = crs_service.transform_for_measurement(gdf, plan)
+        measurements = measurement_service.compute_measurements(gdf, measured_gdf, plan)
+
         repository.update_record(
             file_id,
             feature_count=len(features),
             source_crs=source_crs,
+            measurement_crs=plan.measurement_crs,
+            measurement_strategy=plan.strategy.value,
             features_json=json.dumps([feature.model_dump() for feature in features]),
+            measurements_json=json.dumps(
+                [measurement.model_dump(mode="json") for measurement in measurements]
+            ),
             status=FileStatus.COMPLETED,
             error_message=None,
         )
         logger.info(
-            "Processed %s: %d feature(s), source CRS %s",
+            "Processed %s: %d feature(s), source CRS %s, measurement CRS %s",
             record.filename,
             len(features),
             source_crs,
+            plan.measurement_crs,
         )
     finally:
         # Temporary extraction output is never needed again after processing.
