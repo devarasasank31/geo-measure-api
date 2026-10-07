@@ -170,3 +170,62 @@ def test_only_allowed_paths_are_written(tmp_path: Path) -> None:
         str(path.relative_to(target)).replace("\\", "/") for path in target.rglob("*") if path.is_file()
     )
     assert written == ["nested/deep/ok.shx", "nested/ok.dbf", "ok.shp"]
+
+
+def test_conflicting_entries_fail_cleanly(tmp_path: Path) -> None:
+    """A member that collides with an earlier file/dir cannot crash extraction."""
+    archive_path = build_zip(
+        tmp_path / "conflict.zip",
+        {"nested": b"file first", "nested/layer.shp": b"then a child"},
+    )
+    target = tmp_path / "out"
+
+    with pytest.raises(AppException) as excinfo:
+        zip_service.extract_shapefile_archive(archive_path, target)
+
+    assert excinfo.value.code == "UNSAFE_ARCHIVE"
+    assert "Traceback" not in excinfo.value.message
+    assert not target.exists()
+
+
+def test_damaged_member_reports_corrupt_archive(tmp_path: Path) -> None:
+    """A CRC mismatch during streaming is reported, not leaked as an OSError."""
+    archive_path = tmp_path / "damaged.zip"
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_STORED) as archive:
+        archive.writestr("survey.shp", b"SURVEY-PAYLOAD-" * 16)
+
+    raw = bytearray(archive_path.read_bytes())
+    offset = raw.find(b"SURVEY-PAYLOAD-")
+    assert offset != -1
+    raw[offset + 8] ^= 0xFF
+    archive_path.write_bytes(bytes(raw))
+
+    with pytest.raises(AppException) as excinfo:
+        zip_service.extract_shapefile_archive(archive_path, tmp_path / "out")
+
+    assert excinfo.value.code == "CORRUPT_ARCHIVE"
+    assert not (tmp_path / "out").exists()
+
+
+def test_hostile_upload_filenames_stay_inside_upload_dir(
+    client, app_settings: Settings, fixtures_dir: Path, upload_bytes
+) -> None:
+    """Traversal, absolute and over-long names never influence storage paths."""
+    data = (fixtures_dir / "sample.kml").read_bytes()
+    hostile_names = [
+        "..\\..\\evil.kml",
+        "/etc/passwd.kml",
+        "a/b/c/../escape.kml",
+        "x" * 300 + ".kml",
+    ]
+
+    for name in hostile_names:
+        response = upload_bytes(data, name)
+        assert response.status_code == 201, (name, response.text)
+        assert response.json()["filename"]  # sanitised, never empty
+
+    stored_files = [path for path in app_settings.upload_dir.rglob("*") if path.is_file()]
+    assert stored_files
+    assert all(path.is_relative_to(app_settings.upload_dir) for path in stored_files)
+    assert not (app_settings.upload_dir.parent / "evil.kml").exists()
+    assert not (app_settings.upload_dir.parent / "escape.kml").exists()

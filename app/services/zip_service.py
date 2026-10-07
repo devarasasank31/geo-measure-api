@@ -66,6 +66,22 @@ def extract_shapefile_archive(zip_path: Path, target_dir: Path) -> ExtractedArch
         except AppException:
             cleanup_directory(target_dir)
             raise
+        except zipfile.BadZipFile as exc:
+            cleanup_directory(target_dir)
+            logger.warning("Archive %s is damaged: %s", zip_path, exc)
+            raise AppException(
+                "CORRUPT_ARCHIVE",
+                "The uploaded archive is damaged and could not be read.",
+                status_code=400,
+            ) from exc
+        except OSError as exc:
+            cleanup_directory(target_dir)
+            logger.warning("Archive %s could not be extracted: %s", zip_path, exc)
+            raise AppException(
+                "UNSAFE_ARCHIVE",
+                "The archive contains conflicting or unwritable entries.",
+                status_code=400,
+            ) from exc
 
     shapefile_path = _locate_shapefile(target_dir)
     logger.info(
