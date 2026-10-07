@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
+import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 
 from app.api.routes import files, health
 from app.core.config import settings
@@ -37,6 +38,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("%s stopped", settings.app_name)
 
 
+def _register_request_logging(app: FastAPI) -> None:
+    """Log one line per request: method, path, status and duration."""
+
+    @app.middleware("http")
+    async def log_request(request: Request, call_next) -> Response:
+        started = time.perf_counter()
+        response = await call_next(request)
+        duration_ms = (time.perf_counter() - started) * 1000
+        logger.info(
+            "%s %s -> %s (%.1f ms)",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+        )
+        return response
+
+
 def create_app() -> FastAPI:
     """Build the FastAPI application."""
     app = FastAPI(
@@ -53,6 +72,7 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
     )
     register_exception_handlers(app)
+    _register_request_logging(app)
     app.include_router(health.router)
     app.include_router(files.router)
     return app
