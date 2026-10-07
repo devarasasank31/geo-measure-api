@@ -10,6 +10,7 @@ import geopandas as gpd
 
 from app.core.exceptions import AppException
 from app.models.schemas import Feature
+from app.services import crs_service
 from app.utils.serialization import geometry_to_geojson, properties_to_dict
 
 logger = logging.getLogger(__name__)
@@ -31,9 +32,7 @@ class ParsedDataset:
 
 def crs_label(gdf: gpd.GeoDataFrame) -> str | None:
     """Return the dataset CRS in ``EPSG:xxxx`` form, or ``None`` if missing."""
-    if gdf.crs is None:
-        return None
-    return gdf.crs.to_string()
+    return crs_service.crs_label(gdf.crs)
 
 
 def read_shapefile(shapefile_path: Path) -> gpd.GeoDataFrame:
