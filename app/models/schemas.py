@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
@@ -68,4 +69,19 @@ class FileUploadResponse(BaseModel):
     feature_count: int
     crs: str | None
     status: FileStatus
+
+
+class FileInfoResponse(FileUploadResponse):
+    """Payload returned by ``GET /api/files/{id}/``."""
+
+    format: str
+    size_bytes: int
+    measurement_crs: str | None
+    measurement_strategy: str | None
+    created_at: datetime
+    error: str | None = None
+    features: list[Feature] = Field(
+        default_factory=list,
+        description="Every feature with its geometry, properties and CRS",
+    )
 

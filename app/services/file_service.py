@@ -41,6 +41,19 @@ async def handle_upload(upload: UploadFile) -> FileRecord:
     return _reload(record.id)
 
 
+def load_record_or_404(file_id: str) -> FileRecord:
+    """Return a stored record or raise a 404 API error."""
+    record = repository.get_record(file_id)
+    if record is None:
+        logger.info("Lookup of unknown file id %s", file_id)
+        raise AppException(
+            "FILE_NOT_FOUND",
+            "No file was found with the given id.",
+            status_code=404,
+        )
+    return record
+
+
 async def store_upload(upload: UploadFile) -> FileRecord:
     """Validate an upload and stream it to controlled storage."""
     extension = file_utils.validate_extension(upload.filename, settings.allowed_extensions)
