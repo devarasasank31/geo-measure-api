@@ -9,6 +9,7 @@ from pyproj.aoi import AreaOfInterest
 from pyproj.database import query_utm_crs_info
 from shapely.geometry import box
 
+from app.core.exceptions import AppException
 from app.services import crs_service
 
 
@@ -219,3 +220,67 @@ def test_representative_position_converts_projected_centres_to_lon_lat() -> None
 
     assert lon == pytest.approx(78.405, abs=1e-3)
     assert lat == pytest.approx(17.305, abs=1e-3)
+
+
+def test_transform_moves_geographic_data_into_utm_metres() -> None:
+    gdf = _geographic_gdf((78.4, 17.3, 78.41, 17.31))
+    plan = crs_service.build_plan(gdf)
+
+    transformed = crs_service.transform_for_measurement(gdf, plan)
+
+    assert transformed is not None
+    assert transformed.crs.to_epsg() == 32644
+    min_x, min_y, _, _ = transformed.total_bounds
+    # UTM eastings/northings are metres, never degrees.
+    assert abs(min_x) > 1000
+    assert abs(min_y) > 1000
+
+
+def test_transform_is_skipped_when_source_is_already_suitable() -> None:
+    gdf = _geographic_gdf((78.4, 17.3, 78.41, 17.31)).to_crs("EPSG:32644")
+    plan = crs_service.build_plan(gdf)
+
+    transformed = crs_service.transform_for_measurement(gdf, plan)
+
+    assert transformed is gdf
+
+
+def test_transform_returns_none_without_measurement_crs() -> None:
+    gdf = gpd.GeoDataFrame(geometry=[box(78.4, 17.3, 78.41, 17.31)])
+    plan = crs_service.build_plan(gdf)
+
+    assert crs_service.transform_for_measurement(gdf, plan) is None
+
+
+def test_transform_failure_raises_clean_api_error() -> None:
+    gdf = _geographic_gdf((78.4, 17.3, 78.41, 17.31))
+    broken_plan = crs_service.CrsPlan(
+        source_crs="EPSG:4326",
+        measurement_crs="EPSG:99999",
+        strategy=crs_service.MeasurementStrategy.AUTO_UTM,
+        is_geographic=True,
+        is_projected=False,
+        reason="test",
+    )
+
+    with pytest.raises(AppException) as excinfo:
+        crs_service.transform_for_measurement(gdf, broken_plan)
+
+    assert excinfo.value.code == "CRS_TRANSFORM_FAILED"
+    assert excinfo.value.status_code == 422
+
+
+def test_round_trip_transformation_preserves_area() -> None:
+    """A 100 m x 100 m square stays ~10 000 m2 through the full plan/transform."""
+    square = gpd.GeoDataFrame(
+        geometry=[box(500_000, 1_900_000, 500_100, 1_900_100)],
+        crs="EPSG:32644",
+    )
+
+    geographic = square.to_crs("EPSG:4326")
+    plan = crs_service.build_plan(geographic)
+    restored = crs_service.transform_for_measurement(geographic, plan)
+
+    assert plan.measurement_crs == "EPSG:32644"
+    assert restored is not None
+    assert restored.geometry.area.iloc[0] == pytest.approx(10_000.0, rel=0.01)

@@ -18,6 +18,8 @@ import geopandas as gpd
 from pyproj import CRS, Transformer
 from pyproj.exceptions import CRSError
 
+from app.core.exceptions import AppException
+
 logger = logging.getLogger(__name__)
 
 #: Unit names pyproj uses for metre-based axes.
@@ -230,6 +232,46 @@ def build_plan(gdf: gpd.GeoDataFrame) -> CrsPlan:
         is_projected=True,
         reason=f"{_unsuitable_reason(source)} Measured in EPSG:{epsg} ({utm_zone_label(epsg)}).",
     )
+
+
+def transform_for_measurement(gdf: gpd.GeoDataFrame, plan: CrsPlan) -> gpd.GeoDataFrame | None:
+    """Return ``gdf`` expressed in the plan's measurement CRS.
+
+    Returns ``None`` when no measurement CRS is available, and the original
+    frame when no transformation is needed (identical CRS).
+    """
+    if plan.measurement_crs is None:
+        logger.info("No transformation performed: %s", plan.reason)
+        return None
+
+    source = parse_crs(gdf.crs)
+    target = parse_crs(plan.measurement_crs)
+    if source is not None and source == target:
+        logger.debug("Data already in %s; skipping transformation", plan.measurement_crs)
+        return gdf
+
+    try:
+        transformed = gdf.to_crs(plan.measurement_crs)
+    except Exception as exc:
+        logger.warning(
+            "Transformation from %s to %s failed: %s",
+            crs_label(source),
+            plan.measurement_crs,
+            exc,
+        )
+        raise AppException(
+            "CRS_TRANSFORM_FAILED",
+            "The dataset could not be transformed into the measurement CRS.",
+            status_code=422,
+        ) from exc
+
+    logger.info(
+        "Transformed %d feature(s) from %s to %s",
+        len(gdf),
+        crs_label(source),
+        plan.measurement_crs,
+    )
+    return transformed
 
 
 def _is_suitable_projected(crs: CRS, lon: float, lat: float) -> bool:
