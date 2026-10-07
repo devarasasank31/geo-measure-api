@@ -41,6 +41,52 @@ def read_shapefile(shapefile_path: Path) -> gpd.GeoDataFrame:
     return _read_vector(shapefile_path)
 
 
+def read_kml(kml_path: Path) -> gpd.GeoDataFrame:
+    """Read a KML file into a GeoDataFrame.
+
+    The OGC KML specification defines coordinates as WGS 84 longitude/latitude,
+    and GDAL reports ``EPSG:4326`` for valid files.
+
+    A well-formed KML that simply contains no features is returned as an empty
+    GeoDataFrame instead of being reported as a parse failure.
+    """
+    _enable_fiona_kml_drivers()
+    try:
+        return _read_vector(kml_path)
+    except AppException:
+        if _is_featureless_kml(kml_path):
+            logger.info("KML %s is well-formed but contains no features", kml_path.name)
+            return gpd.GeoDataFrame(geometry=[], crs="EPSG:4326")
+        raise
+
+
+#: KML element names that carry actual feature data.
+_KML_FEATURE_TAGS = frozenset({"Placemark", "GroundOverlay", "Model"})
+
+
+def _is_featureless_kml(path: Path) -> bool:
+    """True when the file is well-formed XML without any KML features."""
+    import xml.etree.ElementTree as ET
+
+    try:
+        tree = ET.parse(path)
+    except (ET.ParseError, OSError, ValueError):
+        return False
+    for element in tree.iter():
+        tag = element.tag
+        if isinstance(tag, str) and tag.rsplit("}", 1)[-1] in _KML_FEATURE_TAGS:
+            return False
+    return True
+
+
+def _enable_fiona_kml_drivers() -> None:
+    """Fiona ships with KML support disabled; enable it for the fallback path."""
+    from fiona import drvsupport
+
+    drvsupport.supported_drivers.setdefault("KML", "rw")
+    drvsupport.supported_drivers.setdefault("LIBKML", "rw")
+
+
 def build_features(gdf: gpd.GeoDataFrame) -> list[Feature]:
     """Convert every row of a GeoDataFrame into a JSON-safe feature."""
     source_crs = crs_label(gdf)

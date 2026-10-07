@@ -111,3 +111,62 @@ def test_crs_label_is_none_when_crs_missing() -> None:
     assert geospatial_service.crs_label(gdf) is None
     features = geospatial_service.build_features(gdf)
     assert features[0].crs is None
+
+
+def test_read_kml_reports_wgs84_crs(sample_kml: Path) -> None:
+    gdf = geospatial_service.read_kml(sample_kml)
+
+    assert len(gdf) == 3
+    assert geospatial_service.crs_label(gdf) == "EPSG:4326"
+
+
+def test_read_kml_extracts_features_and_extended_data(sample_kml: Path) -> None:
+    gdf = geospatial_service.read_kml(sample_kml)
+
+    features = geospatial_service.build_features(gdf)
+
+    assert [f.geometry_type for f in features] == ["Polygon", "LineString", "Point"]
+    assert features[0].properties["Name"] == "North Plot"
+    assert features[0].properties["parcel_id"] == "P-001"
+    assert features[0].properties["zone"] == "residential"
+    assert features[2].properties["Name"] == "Survey Marker"
+    dumps([f.model_dump() for f in features])
+
+
+def test_read_kml_malformed_raises_clean_error(tmp_path: Path) -> None:
+    from app.core.exceptions import AppException
+
+    broken = tmp_path / "broken.kml"
+    broken.write_text("<kml><Document><Placemark><Polygon></Document>", encoding="utf-8")
+
+    with pytest.raises(AppException) as excinfo:
+        geospatial_service.read_kml(broken)
+
+    assert excinfo.value.code == "MALFORMED_INPUT"
+    assert excinfo.value.status_code == 422
+
+
+def test_read_kml_without_features_returns_empty_frame(tmp_path: Path) -> None:
+    featureless = tmp_path / "featureless.kml"
+    featureless.write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>empty</name></Document></kml>',
+        encoding="utf-8",
+    )
+
+    gdf = geospatial_service.read_kml(featureless)
+
+    assert len(gdf) == 0
+    assert geospatial_service.crs_label(gdf) == "EPSG:4326"
+    assert geospatial_service.build_features(gdf) == []
+
+
+def test_read_kml_falls_back_to_fiona_engine(
+    sample_kml: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(geospatial_service, "_READ_ENGINES", ("fiona",))
+
+    gdf = geospatial_service.read_kml(sample_kml)
+
+    assert len(gdf) == 3
+    assert geospatial_service.crs_label(gdf) == "EPSG:4326"
