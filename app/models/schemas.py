@@ -85,3 +85,13 @@ class FileInfoResponse(FileUploadResponse):
         description="Every feature with its geometry, properties and CRS",
     )
 
+
+class MeasurementsResponse(BaseModel):
+    """Payload returned by ``GET /api/files/{id}/measurements/``."""
+
+    file_id: str
+    source_crs: str | None
+    measurement_crs: str | None
+    measurement_strategy: str | None
+    measurements: list[Measurement]
+

@@ -6,7 +6,13 @@ from datetime import datetime
 
 from fastapi import APIRouter, File, UploadFile
 
-from app.models.schemas import Feature, FileInfoResponse, FileUploadResponse
+from app.models.schemas import (
+    Feature,
+    FileInfoResponse,
+    FileUploadResponse,
+    Measurement,
+    MeasurementsResponse,
+)
 from app.services import file_service
 
 router = APIRouter(prefix="/api/files")
@@ -107,4 +113,27 @@ def get_file(file_id: str) -> FileInfoResponse:
         created_at=datetime.fromisoformat(record.created_at),
         error=record.error_message,
         features=[Feature.model_validate(item) for item in record.features],
+    )
+
+
+@router.get(
+    "/{file_id}/measurements/",
+    response_model=MeasurementsResponse,
+    tags=["measurements"],
+    summary="Get measurements for a file",
+    description=(
+        "Returns one measurement entry per feature: polygon/multi-polygon area "
+        "in m², line length in m, points as NOT_REQUIRED, and an explicit "
+        "status for unsupported or unmeasurable features."
+    ),
+    responses=_NOT_FOUND_RESPONSES,
+)
+def get_measurements(file_id: str) -> MeasurementsResponse:
+    record = file_service.load_record_or_404(file_id)
+    return MeasurementsResponse(
+        file_id=record.id,
+        source_crs=record.source_crs,
+        measurement_crs=record.measurement_crs,
+        measurement_strategy=record.measurement_strategy,
+        measurements=[Measurement.model_validate(item) for item in record.measurements],
     )
