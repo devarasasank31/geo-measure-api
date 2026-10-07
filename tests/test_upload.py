@@ -90,6 +90,20 @@ def test_upload_rejects_file_with_wrong_extension_casing_is_allowed(
     assert response.json()["filename"] == "SAMPLE.KML"
 
 
+def test_upload_rejects_non_zip_content(upload_bytes: Callable) -> None:
+    response = upload_bytes(b"this is definitely not an archive", "data.zip")
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "CORRUPT_ARCHIVE"
+
+
+def test_upload_rejects_non_xml_kml_content(upload_bytes: Callable) -> None:
+    response = upload_bytes(b"\x00\x01\x02 binary rubbish", "survey.kml")
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "INVALID_FILE_CONTENT"
+
+
 def test_stored_file_leaves_nothing_behind_after_rejection(upload_bytes: Callable, app_settings: Settings) -> None:
     response = upload_bytes(b"", "empty.kml")
 

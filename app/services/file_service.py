@@ -38,6 +38,7 @@ async def store_upload(upload: UploadFile) -> FileRecord:
 
     try:
         size_bytes = await _stream_to_disk(upload, destination)
+        _validate_content(destination, extension)
     except AppException:
         file_utils.delete_storage(file_id)
         raise
@@ -60,6 +61,26 @@ async def store_upload(upload: UploadFile) -> FileRecord:
         record.size_bytes,
     )
     return record
+
+
+def _validate_content(path: Path, extension: str) -> None:
+    """Cheap content sniffing so obviously wrong payloads fail early.
+
+    The extension only tells us what the client claims the file is; this
+    check verifies the first bytes agree before anything tries to parse it.
+    """
+    if extension == ".zip" and not file_utils.looks_like_zip(path):
+        raise AppException(
+            "CORRUPT_ARCHIVE",
+            "The uploaded file is not a valid ZIP archive.",
+            status_code=400,
+        )
+    if extension == ".kml" and not file_utils.looks_like_xml(path):
+        raise AppException(
+            "INVALID_FILE_CONTENT",
+            "The uploaded file does not look like a KML/XML document.",
+            status_code=400,
+        )
 
 
 async def _stream_to_disk(upload: UploadFile, destination: Path) -> int:
