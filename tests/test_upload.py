@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import Settings
@@ -43,8 +44,10 @@ def test_upload_rejects_empty_file(upload_bytes: Callable) -> None:
     assert response.json()["error"]["code"] == "EMPTY_FILE"
 
 
-def test_upload_rejects_oversized_file(upload_bytes: Callable, app_settings: Settings) -> None:
-    app_settings.max_upload_mb = 1
+def test_upload_rejects_oversized_file(
+    upload_bytes: Callable, app_settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(app_settings, "max_upload_mb", 1)
     payload = b"<kml>" + b"a" * (1024 * 1024 + 1024)
 
     response = upload_bytes(payload, "huge.kml")
