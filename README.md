@@ -474,7 +474,6 @@ tests never touch real application data.
   projection (mitigated by UTM, not eliminated).
 - No upload retention policy yet: stored files accumulate until removed.
 
----
 
-MIT License. Built with FastAPI, GeoPandas, Shapely, pyproj, pyogrio/fiona and
-SQLite.
+
+
