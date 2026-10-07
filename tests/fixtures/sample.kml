@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Sample Survey</name>
+    <Placemark>
+      <name>North Plot</name>
+      <description>A rectangular parcel</description>
+      <ExtendedData>
+        <Data name="parcel_id"><value>P-001</value></Data>
+        <Data name="zone"><value>residential</value></Data>
+      </ExtendedData>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>78.4000,17.3000,0 78.4010,17.3000,0 78.4010,17.3010,0 78.4000,17.3010,0 78.4000,17.3000,0</coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+    <Placemark>
+      <name>Access Road</name>
+      <LineString>
+        <coordinates>78.4020,17.3000,0 78.4030,17.3010,0 78.4040,17.3005,0</coordinates>
+      </LineString>
+    </Placemark>
+    <Placemark>
+      <name>Survey Marker</name>
+      <Point>
+        <coordinates>78.4050,17.3020,0</coordinates>
+      </Point>
+    </Placemark>
+  </Document>
+</kml>

@@ -8,10 +8,11 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI
 
-from app.api.routes import health
+from app.api.routes import files, health
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
+from app.db.database import init_db
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +28,10 @@ OPENAPI_TAGS = [
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Prepare logging and storage directories on startup."""
+    """Prepare storage directories and the database on startup."""
     setup_logging(settings.log_level)
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
+    init_db()
     logger.info("%s v%s started", settings.app_name, settings.app_version)
     yield
     logger.info("%s stopped", settings.app_name)
@@ -52,6 +54,7 @@ def create_app() -> FastAPI:
     )
     register_exception_handlers(app)
     app.include_router(health.router)
+    app.include_router(files.router)
     return app
 
 

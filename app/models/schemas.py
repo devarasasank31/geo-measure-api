@@ -19,3 +19,14 @@ class HealthResponse(BaseModel):
     """Payload returned by ``GET /health``."""
 
     status: str
+
+
+class FileUploadResponse(BaseModel):
+    """Payload returned by ``POST /api/files/``."""
+
+    id: str
+    filename: str
+    feature_count: int
+    crs: str | None
+    status: FileStatus
+
