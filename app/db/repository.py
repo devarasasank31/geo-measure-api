@@ -82,6 +82,13 @@ def _row_to_record(row: "tuple | object") -> FileRecord:
     return FileRecord(**values)
 
 
+def list_records() -> list[FileRecord]:
+    """Return every stored file record, oldest first."""
+    with db_connection() as connection:
+        rows = connection.execute("SELECT * FROM files ORDER BY created_at, id").fetchall()
+    return [_row_to_record(row) for row in rows]
+
+
 def insert_record(record: FileRecord) -> FileRecord:
     """Persist a new file record and return it."""
     values = asdict(record)

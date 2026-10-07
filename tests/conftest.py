@@ -6,11 +6,16 @@ never touch real application data.
 
 from __future__ import annotations
 
+import io
+import itertools
+import zipfile
 from pathlib import Path
 from typing import Callable
 
+import geopandas as gpd
 import pytest
 from fastapi.testclient import TestClient
+from shapely.geometry import box
 
 from app.core.config import Settings, get_settings
 
@@ -44,6 +49,50 @@ def fixtures_dir() -> Path:
 def sample_kml(fixtures_dir: Path) -> Path:
     """Path to the committed multi-geometry sample KML."""
     return fixtures_dir / "sample.kml"
+
+
+@pytest.fixture()
+def make_shapefile_zip(tmp_path: Path) -> Callable[..., Path]:
+    """Factory that writes a GeoDataFrame to disk as a zipped Shapefile."""
+    counter = itertools.count()
+
+    def _make(gdf: gpd.GeoDataFrame, archive_name: str | None = None) -> Path:
+        index = next(counter)
+        work_dir = tmp_path / f"shp_{index}"
+        work_dir.mkdir()
+        gdf.to_file(work_dir / "dataset.shp")
+        archive = tmp_path / (archive_name or f"dataset_{index}.zip")
+        with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
+            for part in sorted(work_dir.iterdir()):
+                zf.write(part, arcname=part.name)
+        return archive
+
+    return _make
+
+
+@pytest.fixture()
+def shapefile_zip(make_shapefile_zip: Callable[..., Path]) -> Path:
+    """A deterministic two-polygon Shapefile archive in EPSG:4326."""
+    gdf = gpd.GeoDataFrame(
+        {"name": ["North Field", "South Field"], "code": [101, 102]},
+        geometry=[box(78.40, 17.30, 78.41, 17.31), box(78.42, 17.32, 78.43, 17.33)],
+        crs="EPSG:4326",
+    )
+    return make_shapefile_zip(gdf, "fields.zip")
+
+
+@pytest.fixture()
+def make_zip_bytes() -> Callable[..., bytes]:
+    """Build ZIP archive bytes entirely in memory."""
+
+    def _make(entries: dict[str, bytes]) -> bytes:
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            for name, data in entries.items():
+                zf.writestr(name, data)
+        return buffer.getvalue()
+
+    return _make
 
 
 @pytest.fixture()

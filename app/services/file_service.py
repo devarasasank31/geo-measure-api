@@ -1,32 +1,39 @@
-"""Upload validation, storage and record lifecycle."""
+"""Upload validation, storage, processing and record lifecycle."""
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
+import geopandas as gpd
 from fastapi import UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.exceptions import AppException
 from app.db import repository
 from app.db.repository import FileRecord
 from app.models.schemas import FileStatus
+from app.services import geospatial_service, zip_service
 from app.utils import file_utils
 
 logger = logging.getLogger(__name__)
 
 _READ_CHUNK_BYTES = 1024 * 1024
+_EXTRACTED_DIRNAME = "extracted"
 
 
 async def handle_upload(upload: UploadFile) -> FileRecord:
-    """Validate, store and register an uploaded file.
+    """Validate, store, register and process an uploaded file.
 
     Raises :class:`AppException` for any input the API refuses; in that case
-    nothing is left behind on disk.
+    nothing is left behind on disk. Processing failures persist a ``FAILED``
+    record before the clean API error is returned.
     """
     record = await store_upload(upload)
-    return record
+    await process_stored_file(record.id)
+    return _reload(record.id)
 
 
 async def store_upload(upload: UploadFile) -> FileRecord:
@@ -50,7 +57,7 @@ async def store_upload(upload: UploadFile) -> FileRecord:
             format=extension.lstrip("."),
             stored_path=str(destination),
             size_bytes=size_bytes,
-            status=FileStatus.COMPLETED,
+            status=FileStatus.PROCESSING,
         )
     )
     logger.info(
@@ -60,6 +67,91 @@ async def store_upload(upload: UploadFile) -> FileRecord:
         record.format,
         record.size_bytes,
     )
+    return record
+
+
+async def process_stored_file(file_id: str) -> None:
+    """Run the CPU/IO-bound processing pipeline off the event loop."""
+    try:
+        await run_in_threadpool(process_record, file_id)
+    except AppException as exc:
+        repository.update_record(
+            file_id, status=FileStatus.FAILED, error_message=exc.message
+        )
+        logger.warning("Processing failed for %s: %s (%s)", file_id, exc.code, exc.message)
+        raise
+    except Exception as exc:  # unexpected failure: log it, hide it from clients
+        logger.exception("Unexpected processing failure for %s", file_id)
+        repository.update_record(
+            file_id,
+            status=FileStatus.FAILED,
+            error_message="The file could not be processed.",
+        )
+        raise AppException(
+            "PROCESSING_FAILED",
+            "The file could not be processed.",
+            status_code=422,
+        ) from exc
+
+
+def process_record(file_id: str) -> None:
+    """Parse a stored file, extract its features and persist the outcome."""
+    record = repository.get_record(file_id)
+    if record is None:
+        raise AppException("FILE_NOT_FOUND", "Unknown file id.", status_code=404)
+
+    try:
+        gdf = _load_dataset(record)
+        features = geospatial_service.build_features(gdf)
+        source_crs = geospatial_service.crs_label(gdf)
+
+        repository.update_record(
+            file_id,
+            feature_count=len(features),
+            source_crs=source_crs,
+            features_json=json.dumps([feature.model_dump() for feature in features]),
+            status=FileStatus.COMPLETED,
+            error_message=None,
+        )
+        logger.info(
+            "Processed %s: %d feature(s), source CRS %s",
+            record.filename,
+            len(features),
+            source_crs,
+        )
+    finally:
+        # Temporary extraction output is never needed again after processing.
+        zip_service.cleanup_directory(_extraction_dir(record))
+
+
+def _load_dataset(record: FileRecord) -> gpd.GeoDataFrame:
+    """Read the stored upload into a GeoDataFrame for its format."""
+    path = Path(record.stored_path)
+    if record.format == "kml":
+        return geospatial_service.read_kml(path)
+    if record.format == "zip":
+        archive = zip_service.extract_shapefile_archive(path, _extraction_dir(record))
+        return geospatial_service.read_shapefile(archive.shapefile_path)
+    raise AppException(
+        "UNSUPPORTED_FILE_TYPE",
+        "Only KML files and ZIP archives containing Shapefiles are supported.",
+        status_code=400,
+    )
+
+
+def _extraction_dir(record: FileRecord) -> Path:
+    return Path(record.stored_path).parent / _EXTRACTED_DIRNAME
+
+
+def _reload(file_id: str) -> FileRecord:
+    record = repository.get_record(file_id)
+    if record is None:
+        logger.error("Record %s disappeared after processing", file_id)
+        raise AppException(
+            "PROCESSING_FAILED",
+            "The file could not be processed.",
+            status_code=422,
+        )
     return record
 
 
